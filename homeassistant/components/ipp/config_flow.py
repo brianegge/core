@@ -7,6 +7,7 @@ import probatio
 from pyipp import (
     IPP,
     IPPConnectionError,
+    IPPConnectionTLSError,
     IPPConnectionUpgradeRequired,
     IPPError,
     IPPParseError,
@@ -86,6 +87,9 @@ class IPPFlowHandler(ConfigFlow, domain=DOMAIN):
             info = await validate_input(self.hass, user_input)
         except IPPConnectionUpgradeRequired:
             return self._show_setup_form({"base": "connection_upgrade"})
+        except IPPConnectionTLSError as err:
+            _LOGGER.debug("IPP TLS Error", exc_info=True)
+            return self._show_setup_form({"base": "tls_error"}, {"error": err.reason})
         except IPPConnectionError, IPPResponseError:
             _LOGGER.debug("IPP Connection/Response Error", exc_info=True)
             return self._show_setup_form({"base": "cannot_connect"})
@@ -155,6 +159,11 @@ class IPPFlowHandler(ConfigFlow, domain=DOMAIN):
             info = await validate_input(self.hass, self.discovery_info)
         except IPPConnectionUpgradeRequired:
             return self.async_abort(reason="connection_upgrade")
+        except IPPConnectionTLSError as err:
+            _LOGGER.debug("IPP TLS Error", exc_info=True)
+            return self.async_abort(
+                reason="tls_error", description_placeholders={"error": err.reason}
+            )
         except IPPConnectionError, IPPResponseError:
             _LOGGER.debug("IPP Connection/Response Error", exc_info=True)
             return self.async_abort(reason="cannot_connect")
@@ -222,6 +231,7 @@ class IPPFlowHandler(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Handle reconfiguration of an IPP printer."""
         errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {}
         reconfigure_entry = self._get_reconfigure_entry()
 
         if user_input is not None:
@@ -229,6 +239,10 @@ class IPPFlowHandler(ConfigFlow, domain=DOMAIN):
                 info = await validate_input(self.hass, user_input)
             except IPPConnectionUpgradeRequired:
                 errors["base"] = "connection_upgrade"
+            except IPPConnectionTLSError as err:
+                _LOGGER.debug("IPP TLS Error", exc_info=True)
+                errors["base"] = "tls_error"
+                placeholders["error"] = err.reason
             except IPPConnectionError, IPPResponseError:
                 _LOGGER.debug("IPP Connection/Response Error", exc_info=True)
                 errors["base"] = "cannot_connect"
@@ -251,6 +265,7 @@ class IPPFlowHandler(ConfigFlow, domain=DOMAIN):
                 DATA_SCHEMA, user_input or reconfigure_entry.data
             ),
             errors=errors,
+            description_placeholders=placeholders,
         )
 
     def _is_same_printer(self, entry: IPPConfigEntry, info: dict[str, Any]) -> bool:
@@ -266,10 +281,15 @@ class IPPFlowHandler(ConfigFlow, domain=DOMAIN):
             )
         )
 
-    def _show_setup_form(self, errors: dict | None = None) -> ConfigFlowResult:
+    def _show_setup_form(
+        self,
+        errors: dict | None = None,
+        placeholders: dict[str, str] | None = None,
+    ) -> ConfigFlowResult:
         """Show the setup form to the user."""
         return self.async_show_form(
             step_id="user",
             data_schema=DATA_SCHEMA,
             errors=errors or {},
+            description_placeholders=placeholders,
         )

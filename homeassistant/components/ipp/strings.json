@@ -8,13 +8,15 @@
       "ipp_error": "Encountered IPP error.",
       "ipp_version_error": "IPP version not supported by printer.",
       "parse_error": "Failed to parse response from printer.",
+      "tls_error": "The secure (TLS) connection to the printer failed: {error}",
       "unique_id_required": "Device missing unique identification required for discovery."
     },
     "error": {
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
       "connection_upgrade": "Failed to connect to printer. Please try again with SSL/TLS option checked.",
       "ipp_error": "[%key:component::ipp::config::abort::ipp_error%]",
-      "ipp_version_error": "[%key:component::ipp::config::abort::ipp_version_error%]"
+      "ipp_version_error": "[%key:component::ipp::config::abort::ipp_version_error%]",
+      "tls_error": "[%key:component::ipp::config::abort::tls_error%]"
     },
     "flow_title": "{name}",
     "step": {

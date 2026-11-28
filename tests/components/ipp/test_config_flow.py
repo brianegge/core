@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from pyipp import (
     IPPConnectionError,
+    IPPConnectionTLSError,
     IPPConnectionUpgradeRequired,
     IPPError,
     IPPParseError,
@@ -172,6 +173,62 @@ async def test_zeroconf_connection_upgrade_required(
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "connection_upgrade"
+
+
+async def test_user_tls_error(
+    hass: HomeAssistant,
+    mock_ipp_config_flow: MagicMock,
+) -> None:
+    """Test we show the TLS failure reason on the user form."""
+    mock_ipp_config_flow.printer.side_effect = IPPConnectionTLSError(
+        "TLS handshake with IPP server failed: SSLV3_ALERT_HANDSHAKE_FAILURE",
+        reason="SSLV3_ALERT_HANDSHAKE_FAILURE",
+    )
+
+    user_input = {**MOCK_USER_INPUT, CONF_SSL: True}
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input=user_input
+    )
+
+    assert result["step_id"] == "user"
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "tls_error"}
+    assert result["description_placeholders"] == {
+        "error": "SSLV3_ALERT_HANDSHAKE_FAILURE"
+    }
+
+    mock_ipp_config_flow.printer.side_effect = None
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input=user_input
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+async def test_zeroconf_tls_error(
+    hass: HomeAssistant,
+    mock_ipp_config_flow: MagicMock,
+) -> None:
+    """Test we abort the zeroconf flow with the TLS failure reason."""
+    mock_ipp_config_flow.printer.side_effect = IPPConnectionTLSError(
+        "TLS handshake with IPP server failed: SSLV3_ALERT_HANDSHAKE_FAILURE",
+        reason="SSLV3_ALERT_HANDSHAKE_FAILURE",
+    )
+
+    discovery_info = dataclasses.replace(MOCK_ZEROCONF_IPPS_SERVICE_INFO)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_ZEROCONF},
+        data=discovery_info,
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "tls_error"
+    assert result["description_placeholders"] == {
+        "error": "SSLV3_ALERT_HANDSHAKE_FAILURE"
+    }
 
 
 async def test_user_parse_error(
@@ -663,6 +720,29 @@ async def test_reconfigure_zeroconf_uuid_matching_device_serial(
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
     assert mock_config_entry.data[CONF_HOST] == "192.168.1.32"
+
+
+async def test_reconfigure_flow_tls_error(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_ipp_config_flow: MagicMock,
+) -> None:
+    """Test the reconfigure flow shows the TLS failure reason."""
+    mock_config_entry.add_to_hass(hass)
+    mock_ipp_config_flow.printer.side_effect = IPPConnectionTLSError(
+        "TLS handshake with IPP server failed: WRONG_VERSION_NUMBER",
+        reason="WRONG_VERSION_NUMBER",
+    )
+
+    result = await mock_config_entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input=RECONFIGURE_INPUT
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+    assert result["errors"] == {"base": "tls_error"}
+    assert result["description_placeholders"] == {"error": "WRONG_VERSION_NUMBER"}
 
 
 @pytest.mark.parametrize(
